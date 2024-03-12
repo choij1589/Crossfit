@@ -6,7 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime
 
 # updated 020324
-# total 219 pages
+# total 248 pages
 # 50 athletes per page
 # 10944 athletes in total
 driver = webdriver.Chrome()
@@ -28,7 +28,7 @@ def get_scores(page):
     return scores
 
 scores = []
-for page in range(1, 220):
+for page in range(1, 248):
     print(f"Processing page {page}")
     page_scores = get_scores(page)
     if page_scores[0] == "(--)":
