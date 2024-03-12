@@ -12,14 +12,16 @@ from datetime import datetime
 driver = webdriver.Chrome()
 
 def get_scores(page):
-    driver.get(f"https://games.crossfit.com/leaderboard/open/2024?view=0&division=1&region=28&scaled=0&sort=0&page={page}")
+    #driver.get(f"https://games.crossfit.com/leaderboard/open/2024?view=0&division=1&region=28&scaled=0&sort=0&page={page}")
+    driver.get(f"https://games.crossfit.com/leaderboard/open/2024?view=0&division=1&region=28&scaled=0&sort=2&page={page}")
     wait = WebDriverWait(driver, 10)
     leaderboard_loaded = EC.presence_of_element_located((By.ID, 'leaderboardSponsorVisible'))
     wait.until(leaderboard_loaded)
 
     scores = []
     for i in range(1, 51):
-        css_selector = f"#leaderboardSponsorVisible > div > div.inner-container > table > tbody > tr:nth-child({i}) > td.score > div > div.rank-result > span > span.result"
+        #css_selector = f"#leaderboardSponsorVisible > div > div.inner-container > table > tbody > tr:nth-child({i}) > td.score > div > div.rank-result > span > span.result"
+        css_selector = f"#leaderboardSponsorVisible > div > div.inner-container > table > tbody > tr:nth-child({i}) > td.score.active-sort > div > div.rank-result > span > span.result"
         score_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
         scores.append(score_element.text)
 
