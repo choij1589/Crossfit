@@ -19,11 +19,13 @@ RAW_DIR = os.path.join(DATA_DIR, "raw")
 OUTPUT_CSV = os.path.join(DATA_DIR, "26.1_scores.csv")
 
 DIVISIONS = [
-    {"division": 1, "label": "men_rx"},
-    {"division": 2, "label": "women_rx"},
+    {"division": 1, "label": "men_rx",      "scaled": 0},
+    {"division": 2, "label": "women_rx",    "scaled": 0},
+    {"division": 1, "label": "men_scaled",  "scaled": 1},
+    {"division": 2, "label": "women_scaled","scaled": 1},
 ]
 
-CONCURRENT_REQUESTS = 10
+CONCURRENT_REQUESTS = 5
 
 
 def page_has_scores(rows):
@@ -34,18 +36,18 @@ def page_has_scores(rows):
     )
 
 
-async def fetch_page(session, semaphore, division, page):
+async def fetch_page(session, semaphore, division, page, scaled=0):
     """Fetch a single leaderboard page."""
     params = {
         "view": 0,
         "division": division,
         "region": 0,
-        "scaled": 0,
+        "scaled": scaled,
         "sort": 0,
         "page": page,
     }
     async with semaphore:
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 async with session.get(BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status == 200:
@@ -59,12 +61,12 @@ async def fetch_page(session, semaphore, division, page):
     return None
 
 
-async def find_last_page_with_scores(session, semaphore, division, total_pages):
+async def find_last_page_with_scores(session, semaphore, division, total_pages, scaled=0):
     """Binary search for the last page that has athletes with scores."""
     lo, hi = 1, total_pages
     while lo < hi:
         mid = (lo + hi + 1) // 2
-        result = await fetch_page(session, semaphore, division, mid)
+        result = await fetch_page(session, semaphore, division, mid, scaled=scaled)
         if result and page_has_scores(result.get("leaderboardRows", [])):
             lo = mid
         else:
@@ -76,11 +78,12 @@ async def fetch_division(division_config):
     """Fetch all pages with scores for a division."""
     div = division_config["division"]
     label = division_config["label"]
+    scaled = division_config.get("scaled", 0)
 
     async with aiohttp.ClientSession() as session:
         semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
 
-        first = await fetch_page(session, semaphore, div, 1)
+        first = await fetch_page(session, semaphore, div, 1, scaled=scaled)
         if not first:
             print(f"Failed to fetch first page for {label}")
             return []
@@ -88,7 +91,7 @@ async def fetch_division(division_config):
         total_pages = first["pagination"]["totalPages"]
         total_athletes = first["pagination"]["totalCompetitors"]
 
-        last_page = await find_last_page_with_scores(session, semaphore, div, total_pages)
+        last_page = await find_last_page_with_scores(session, semaphore, div, total_pages, scaled=scaled)
         print(f"\n{label}: {total_athletes} registered, scores through page {last_page}/{total_pages}")
 
         # Save metadata
@@ -101,7 +104,7 @@ async def fetch_division(division_config):
 
         if last_page > 1:
             tasks = [
-                fetch_page(session, semaphore, div, page)
+                fetch_page(session, semaphore, div, page, scaled=scaled)
                 for page in range(2, last_page + 1)
             ]
             pbar = tqdm(total=last_page - 1, desc=label, unit="pg")
@@ -140,7 +143,7 @@ def parse_time_seconds(score):
     return None
 
 
-def parse_rows(raw_rows, gender):
+def parse_rows(raw_rows, gender, scaled=False):
     """Parse raw API rows into flat dicts."""
     records = []
     for row in raw_rows:
@@ -169,6 +172,7 @@ def parse_rows(raw_rows, gender):
             "competitor_id": entrant.get("competitorId"),
             "name": entrant.get("competitorName"),
             "gender": gender,
+            "scaled": scaled,
             "rank": row.get("overallRank"),
             "score_display": score_display,
             "time_seconds": time_seconds,
@@ -189,7 +193,7 @@ async def main():
     for div_config in DIVISIONS:
         raw_rows = await fetch_division(div_config)
         gender = "M" if div_config["division"] == 1 else "F"
-        records = parse_rows(raw_rows, gender)
+        records = parse_rows(raw_rows, gender, scaled=bool(div_config.get("scaled", 0)))
         all_records.extend(records)
         print(f"  Parsed {len(records)} valid scores")
 

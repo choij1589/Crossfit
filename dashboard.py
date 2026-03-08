@@ -40,6 +40,11 @@ def load_data():
     df["time_seconds"] = pd.to_numeric(df["time_seconds"], errors="coerce")
     df["reps"] = pd.to_numeric(df["reps"], errors="coerce")
     df["finished"] = df["time_seconds"].notna()
+    if "scaled" not in df.columns:
+        df["scaled"] = False
+    else:
+        df["scaled"] = df["scaled"].fillna(False).astype(bool)
+    df = df[~df["scaled"]]
     return df
 
 
