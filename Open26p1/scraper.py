@@ -1,11 +1,12 @@
 """
 CrossFit Open 2026 Leaderboard Scraper
-Fetches 26.2 Rx'd scores for Men and Women and saves to CSV.
+Fetches 26.1 Rx'd scores for Men and Women and saves to CSV.
 """
 
 import asyncio
 import json
 import os
+import re
 import time
 
 import aiohttp
@@ -15,8 +16,7 @@ from tqdm import tqdm
 BASE_URL = "https://c3po.crossfit.com/api/leaderboards/v2/competitions/open/2026/leaderboards"
 DATA_DIR = "data"
 RAW_DIR = os.path.join(DATA_DIR, "raw")
-OUTPUT_CSV = os.path.join(DATA_DIR, "26.2_scores.csv")
-SCORE_INDEX = 1
+OUTPUT_CSV = os.path.join(DATA_DIR, "26.1_scores.csv")
 
 DIVISIONS = [
     {"division": 1, "label": "men_rx",      "scaled": 0},
@@ -31,7 +31,7 @@ CONCURRENT_REQUESTS = 5
 def page_has_scores(rows):
     """Check if any row on a page has a non-empty score."""
     return any(
-        row.get("scores") and len(row["scores"]) > SCORE_INDEX and row["scores"][SCORE_INDEX].get("scoreDisplay", "").strip()
+        row.get("scores") and row["scores"][0].get("scoreDisplay", "").strip()
         for row in rows
     )
 
@@ -124,25 +124,49 @@ async def fetch_division(division_config):
     return all_rows
 
 
-def parse_rows(raw_rows, gender, scaled=False):
-    """Parse raw API rows into flat dicts.
+def parse_reps_from_display(score_display):
+    """Extract rep count from scoreDisplay like '163 reps' or '276 reps - s'."""
+    if not score_display:
+        return None
+    m = re.match(r"(\d+)\s*reps", score_display)
+    return int(m.group(1)) if m else None
 
-    TODO 26.2: Determine workout format and update parsing logic accordingly.
-    """
+
+def parse_time_seconds(score):
+    """Parse time in seconds from score object."""
+    t = score.get("time")
+    if t and t != "":
+        try:
+            return int(t)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def parse_rows(raw_rows, gender, scaled=False):
+    """Parse raw API rows into flat dicts."""
     records = []
     for row in raw_rows:
         entrant = row.get("entrant", {})
         scores = row.get("scores", [])
-        if not scores or len(scores) <= SCORE_INDEX:
+        if not scores:
             continue
 
-        score = scores[SCORE_INDEX]
+        score = scores[0]
         score_display = score.get("scoreDisplay", "").strip()
 
         if not score_display:
             continue
 
-        # TODO 26.2: Parse workout-specific fields (reps, time, weight, etc.)
+        time_seconds = parse_time_seconds(score)
+        reps = parse_reps_from_display(score_display)
+
+        # For finishers, extract reps from breakdown (e.g. "354 reps\n")
+        if time_seconds and not reps:
+            breakdown = score.get("breakdown", "")
+            m = re.match(r"(\d+)\s*reps", breakdown)
+            if m:
+                reps = int(m.group(1))
 
         records.append({
             "competitor_id": entrant.get("competitorId"),
@@ -151,6 +175,8 @@ def parse_rows(raw_rows, gender, scaled=False):
             "scaled": scaled,
             "rank": row.get("overallRank"),
             "score_display": score_display,
+            "time_seconds": time_seconds,
+            "reps": reps,
             "country": entrant.get("countryOfOriginName"),
             "affiliate": entrant.get("affiliateName"),
             "age": entrant.get("age"),

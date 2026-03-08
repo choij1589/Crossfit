@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 source /afs/cern.ch/user/c/choij/private/crossfit-venv/bin/activate
 
-OUTDIR="Open26p2"
+OUTDIR="."
 
 echo "=== Scraping leaderboard ==="
 python scraper.py
