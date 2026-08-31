@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-source /afs/cern.ch/user/c/choij/private/crossfit-venv/bin/activate
+source ~/workspace/Crossfit/venv/bin/activate
 
 OUTDIR="."
 

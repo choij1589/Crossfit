@@ -1,0 +1,6 @@
+aiohttp
+requests
+tqdm
+pandas
+streamlit
+plotly
